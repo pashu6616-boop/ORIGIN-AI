@@ -44,9 +44,9 @@ The default model is 2 layers, 96 hidden units, 4 attention heads, and 128 subwo
 
 For pipeline verification only, use `python scripts/train.py --data demo_data/toy.txt --smoke-test`. This fixture is not the default and must not be described as useful training.
 
-## Optional Google Colab Free
+## Google Colab T4
 
-See [colab.md](colab.md). Colab may disconnect and may be CPU-only. Drive is never mounted automatically. Its instructions include a notebook-generation plan with an explicit, user-run mount step. No paid Colab tier or billing is required.
+See [colab.md](colab.md) and run [`../notebooks/ORIGIN_AI_Colab.ipynb`](../notebooks/ORIGIN_AI_Colab.ipynb) in a Colab T4 GPU runtime. Drive mounting is explicit in the notebook. No paid APIs or provider credentials are needed for this training workflow.
 
 ## Scope and limitations
 

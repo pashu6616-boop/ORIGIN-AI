@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--cache-dir", default=str(ROOT / "data" / "processed"))
     parser.add_argument("--steps", type=int, help="Training steps for this invocation (additional steps when resuming).")
     parser.add_argument("--vocab-size", type=int, help="Override the BPE tokenizer vocabulary size.")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto", help="Training device; auto selects CUDA when available.")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--smoke-test", action="store_true", help="Use smaller settings; choose demo_data/toy.txt explicitly for a pipeline-only check.")
     args = parser.parse_args()
@@ -36,6 +37,9 @@ def main():
             if args.steps < 1: raise ValueError("--steps must be positive.")
             training["steps"] = args.steps
         if args.vocab_size is not None: training["vocab_size"] = args.vocab_size
+        if args.device == "cuda" and not torch.cuda.is_available():
+            raise ValueError("CUDA was requested but is not available in this PyTorch runtime.")
+        device = "cuda" if args.device == "cuda" or (args.device == "auto" and torch.cuda.is_available()) else "cpu"
         if args.validation_data:
             train_manifest = prepare_corpus(args.data, cache_dir / "train", validation_fraction=0.0, seed=int(training["seed"]))
             validation_manifest = prepare_corpus(args.validation_data, cache_dir / "validation", validation_fraction=0.0, seed=int(training["seed"]))
@@ -58,12 +62,12 @@ def main():
         training["corpus_fingerprint"] = manifest["fingerprint"]
         torch.set_num_threads(max(1, min(int(training.get("cpu_threads", 2)), os.cpu_count() or 1)))
         seed_everything(int(training["seed"]))
-        model = DecoderTransformer(config)
+        model = DecoderTransformer(config).to(device)
         parameter_count = sum(parameter.numel() for parameter in model.parameters())
         optimizer = torch.optim.AdamW(model.parameters(), lr=float(training["learning_rate"]))
         start_step = 0
         if args.resume:
-            prior = load_checkpoint(checkpoint, model, optimizer, device="cpu")
+            prior = load_checkpoint(checkpoint, model, optimizer, device=device)
             if prior.get("training_config", {}).get("corpus_fingerprint") != manifest["fingerprint"]: raise ValueError("The current corpus differs from the checkpoint corpus; use the original corpus or start a new run.")
             start_step = int(prior.get("step", 0))
         if len(train_ids) <= config.block_size: raise ValueError(f"Training corpus has {len(train_ids)} tokens; block_size={config.block_size}. Add more text or reduce block_size.")
@@ -73,13 +77,13 @@ def main():
         save_interval = max(1, int(training["save_every_steps"]))
         while remaining:
             segment = min(save_interval, remaining)
-            partial = train_steps(model, optimizer, train_ids, val_ids, steps=segment, block_size=config.block_size, batch_size=int(training["batch_size"]), seed=int(training["seed"]) + start_step, eval_batches=int(training["eval_batches"]), eval_interval=int(training["eval_interval"]))
+            partial = train_steps(model, optimizer, train_ids, val_ids, steps=segment, block_size=config.block_size, batch_size=int(training["batch_size"]), device=device, seed=int(training["seed"]) + start_step, eval_batches=int(training["eval_batches"]), eval_interval=int(training["eval_interval"]))
             metrics["train_loss"].extend(partial["train_loss"])
             metrics["validation_loss"].extend(partial["validation_loss"])
             start_step += segment; remaining -= segment
             save_checkpoint(checkpoint, model, optimizer, tokenizer, training, metrics, start_step)
             print(f"step {start_step}: train_loss={metrics['train_loss'][-1]:.4f}; validation_loss={metrics['validation_loss'][-1] if metrics['validation_loss'] else 'pending'}", flush=True)
-        print(json.dumps({"status":"ok","device":"cpu","source_files":len(manifest["source_files"]),"train_lines":manifest["train_lines"],"validation_lines":manifest["validation_lines"],"duplicate_lines_removed":manifest["duplicates"],"invalid_json_lines":manifest["invalid_json_lines"],"train_tokens":len(train_ids),"vocab_size":tokenizer.vocab_size,"parameters":parameter_count,"estimated_optimizer_and_parameter_mib":round(parameter_count * 16 / (1024 ** 2), 2),"step":start_step,"train_loss":metrics["train_loss"][-1],"validation_loss":metrics["validation_loss"][-1] if metrics["validation_loss"] else None,"validation_fallback_to_training_data":validation_fallback,"checkpoint":str(checkpoint)}, indent=2))
+        print(json.dumps({"status":"ok","device":device,"source_files":len(manifest["source_files"]),"train_lines":manifest["train_lines"],"validation_lines":manifest["validation_lines"],"duplicate_lines_removed":manifest["duplicates"],"invalid_json_lines":manifest["invalid_json_lines"],"train_tokens":len(train_ids),"vocab_size":tokenizer.vocab_size,"parameters":parameter_count,"estimated_optimizer_and_parameter_mib":round(parameter_count * 16 / (1024 ** 2), 2),"step":start_step,"train_loss":metrics["train_loss"][-1],"validation_loss":metrics["validation_loss"][-1] if metrics["validation_loss"] else None,"validation_fallback_to_training_data":validation_fallback,"checkpoint":str(checkpoint)}, indent=2))
     except (FileNotFoundError, ValueError, MemoryError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
 

@@ -1,208 +1,98 @@
-# Aether — An Autonomous AI Technology Research Persona
+# ORIGIN AI v0.1
 
-**🚀 Live: [affectionate-bravery-production-bc54.up.railway.app](https://affectionate-bravery-production-bc54.up.railway.app/)**
+ORIGIN is a local research implementation for training a small decoder-only language model from random initialization. It includes a configurable Transformer, SentencePiece BPE tokenizer, local corpus preparation, checkpoint/resume support, short text generation, and a Streamlit interface. It uses no pretrained model weights and makes no paid API calls.
 
-Built for the ABTalks Hackathon. Aether is an autonomous AI persona that, once
-initialized, independently discovers AI/tech topics, judges whether they
-deserve publishing, writes posts in a consistent editorial voice, remembers
-what it has already covered, and keeps publishing over time — with no further
-human prompting.
+This is an experimental training system, not a production assistant or a GPT-level model. The default model has 2 Transformer layers, 96 hidden dimensions, 4 attention heads, a 128-token context window, and about 433,000 parameters. A short run on WikiText-2 demonstrates that the pipeline learns and resumes; it does not establish useful general-purpose capabilities.
 
-This is **not** a chatbot and **not** a generic content generator.
+## Project layout
 
-- `AI_USAGE_LOG.md` — full stage-by-stage AI-assisted development history.
-- `PROMPTS.md` — every prompt used to build this project, in order.
+- `origin/` — model, tokenizer, corpus preparation, training, checkpoints, evaluation helpers, local retrieval, and modality status contracts.
+- `scripts/train.py` — train from scratch or resume a checkpoint on CPU or CUDA.
+- `scripts/evaluate.py` — generate a short continuation from a checkpoint.
+- `scripts/download_wikitext2.py` — download and verify the three WikiText-2 splits.
+- `configs/` — model dimensions and training parameters.
+- `app/main.py` — local Streamlit interface.
+- `notebooks/ORIGIN_AI_Colab.ipynb` — Colab workflow for a GPU runtime, Drive persistence, smoke training, full training, resume, evaluation, and generation.
+- `tests/` — unit and integration checks for model, data, tokenizer, retrieval, checkpoint, and app paths.
 
-## How it works
+The existing `backend/` and `frontend/` directories and the historical `AI_USAGE_LOG.md` and `PROMPTS.md` belong to the separate Aether application. They are retained in the repository and are not used by ORIGIN.
 
-Once `POST /api/agent/init` is called, a background scheduler runs an
-autonomous cycle every 30 minutes (`PUBLISH_INTERVAL_MINUTES`), fully
-unattended:
+## Local setup (Windows)
 
-```
-discover  →  judge  →  memory check  →  write  →  publish
-```
+Use Python 3.11 or 3.12 and run these commands from the repository root:
 
-1. **Discover** — pulls candidate articles from 14 live sources (Hacker News,
-   arXiv, Reddit r/MachineLearning & r/LocalLLaMA, TechCrunch AI, Ars Technica,
-   VentureBeat, MIT Tech Review, and more), deduped against a URL-hash cache.
-2. **Judge** — an LLM call scores each candidate against Aether's editorial
-   standards and **rejects** topics that don't fit (logged in
-   `rejected_topics`, not just silently dropped).
-3. **Memory check** — accepted topics are checked against previously
-   published posts (DB fingerprint + Breeth vector search) to avoid repeats.
-4. **Write** — an LLM generates title, rationale, and post content in
-   Aether's fixed voice profile (`app/core/persona.json`).
-5. **Publish** — persisted as a `Post` row, immediately visible on
-   `GET /api/agent/feed`.
-
-Every published post carries **why it was selected, why it's relevant now,
-and its source URL(s)** — enforced at the schema level (`Post.rationale` and
-`Post.sources` are non-nullable).
-
-## Tech Stack
-
-| Layer      | Choice |
-|------------|--------|
-| Frontend   | Next.js (App Router) |
-| Backend    | FastAPI |
-| Database   | SQLite (via SQLAlchemy) |
-| Memory     | Breeth (vector fact store) + DB fingerprint dedup |
-| LLM        | Gemini + OpenRouter (behind a provider abstraction) |
-| Scheduler  | APScheduler (in-process background job) |
-| Deployment | Railway (two services: backend + frontend) |
-
-## Repository Structure
-
-```
-aether/
-├── backend/
-│   ├── app/
-│   │   ├── main.py               # FastAPI entrypoint + health check
-│   │   ├── core/
-│   │   │   ├── config.py         # env-driven settings
-│   │   │   ├── database.py       # SQLAlchemy engine/session, init_db()
-│   │   │   ├── persona.json      # static editorial identity ("persona bible")
-│   │   │   └── topic_sources.json # 14 configured discovery sources
-│   │   ├── routes/agent.py       # POST /api/agent/init, GET /api/agent/feed
-│   │   ├── services/
-│   │   │   ├── agent_service.py       # get_or_create_agent, persona_description via LLM
-│   │   │   ├── persona_service.py     # builds voice-profile prompt from persona.json
-│   │   │   ├── breeth_client.py       # write_fact/search over Breeth's REST API
-│   │   │   ├── topic_discovery.py     # fetch+parse raw candidates from sources
-│   │   │   ├── sources_cache_service.py # URL-hash dedup against sources_cache
-│   │   │   ├── fingerprint.py         # near-duplicate hash (title+keywords+source)
-│   │   │   ├── editorial_judgment.py  # LLM accept/reject, logs rejected_topics
-│   │   │   ├── memory_service.py      # dedup vs. published topics (DB + Breeth)
-│   │   │   ├── post_writer.py         # generates TITLE/RATIONALE/CONTENT via LLM
-│   │   │   ├── publisher.py           # persists Post row, mirrors to Breeth
-│   │   │   ├── scheduler.py           # chains discover→judge→memory→write→publish
-│   │   │   └── llm/                   # LLMProvider ABC + Gemini/OpenRouter implementations
-│   │   ├── schemas/agent.py      # AgentInitResponse, FeedPost, FeedResponse
-│   │   └── models/                # agents, posts, rejected_topics, sources_cache
-│   ├── scripts/                   # standalone verification scripts (one per stage)
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── railway.json
-├── frontend/
-│   ├── app/
-│   │   ├── layout.tsx             # root layout + metadata
-│   │   ├── globals.css            # hand-written dark theme
-│   │   ├── lib/api.ts             # typed initAgent()/getFeed() fetch wrappers
-│   │   ├── page.tsx                # Landing — calls POST /api/agent/init
-│   │   └── feed/page.tsx          # Feed — polls GET /api/agent/feed every 30s
-│   ├── package.json
-│   └── .env.local.example         # NEXT_PUBLIC_API_URL
-├── AI_USAGE_LOG.md
-├── PROMPTS.md
-└── README.md
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-## Running Locally
+If PowerShell blocks activation, run `\.venv\Scripts\python.exe -m pip install -r requirements.txt` and use that interpreter for later commands.
 
-**Backend**
-```bash
-cd backend
-cp .env.example .env      # fill in LLM/Breeth keys if you want live generation
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-curl http://localhost:8000/api/health
+## Run checks and a pipeline smoke test
+
+```powershell
+python -m pytest tests -q
+python scripts/train.py --data demo_data/toy.txt --smoke-test --device cpu --checkpoint checkpoints\smoke.pt
+python scripts/evaluate.py "ORIGIN" --checkpoint checkpoints\smoke.pt --device cpu --max-new-tokens 40
 ```
 
-**Frontend**
-```bash
-cd frontend
-npm install
-npm run dev
-# open http://localhost:3000 (Landing) and /feed
+The toy file is only for verifying that training, checkpoint saving, loading, and generation execute. It is not a useful language-model training corpus.
+
+## Train on WikiText-2
+
+Download the corpus and preserve the official train, validation, and test splits:
+
+```powershell
+python scripts/download_wikitext2.py
 ```
 
-Without real API keys, `/init` still succeeds (`persona_description` comes
-back `None` instead of failing) — this is a deliberate graceful-fallback
-path, not a bug.
+The downloader verifies pinned SHA-256 digests, writes text files under `data/wikitext-2/`, and records the source and license details in `SOURCE.txt`. Review those terms before redistributing the dataset. The test split is not used by the training or validation commands.
 
-## API Contract
+Train on CPU:
 
-Exactly two public endpoints, frozen to the hackathon evaluator shape.
-
-### `POST /api/agent/init`
-Idempotent — safe to call more than once, always returns the same
-`agentId` and never starts a second scheduler. Also starts the autonomous
-publish-cycle in the background (not reflected in the response body).
-
-```json
-// Request (optional body)
-{ "persona": { "name": "Aether", "domain": "AI Technology" } }
-
-// Response 200
-{ "agentId": "string (uuid)" }
+```powershell
+python scripts/train.py `
+  --data data\wikitext-2\wiki.train.tokens `
+  --validation-data data\wikitext-2\wiki.valid.tokens `
+  --device cpu `
+  --steps 1000 `
+  --checkpoint checkpoints\wikitext2.pt
 ```
 
-### `GET /api/agent/feed`
-Read-only, no side effects, safe to poll repeatedly (including before
-`/init` has ever been called).
+To continue that run, use the same corpus and checkpoint with `--resume`; the requested number of steps is added to the saved step:
 
-```json
-{
-  "posts": [
-    {
-      "id": "p7",
-      "createdAt": "2026-08-07T10:30:00Z",
-      "text": "...",
-      "rationale": "Why this topic was selected, why it's relevant now, and why it beat other candidates.",
-      "sources": ["https://..."]
-    }
-  ]
-}
+```powershell
+python scripts/train.py `
+  --data data\wikitext-2\wiki.train.tokens `
+  --validation-data data\wikitext-2\wiki.valid.tokens `
+  --device cpu `
+  --resume `
+  --steps 500 `
+  --checkpoint checkpoints\wikitext2.pt
 ```
 
-`posts` is always newest-first; old posts are never deleted or hidden;
-`sources` is always `[]` (never `null`) when empty. No auth, no pagination,
-no `/generate` or `/run` endpoint — every cycle after `/init` runs only via
-the internal scheduler.
+Use `--device cuda` to require an available CUDA GPU, or `--device auto` to select CUDA when available and CPU otherwise. Checkpoint metadata includes model/training configuration, metrics, and step; the tokenizer is stored alongside the checkpoint. Resume rejects a changed corpus fingerprint or incompatible model configuration.
 
-## Deployment (Railway)
+Generate a sample:
 
-Two separate Railway services from this one repo, so a frontend redeploy
-never bounces the backend's long-lived scheduler:
+```powershell
+python scripts/evaluate.py "The meaning of language" --checkpoint checkpoints\wikitext2.pt --device auto --max-new-tokens 60
+```
 
-1. **Backend service** — Root Directory `backend`. Railway auto-detects
-   `backend/railway.json` (Nixpacks, `uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
-   Set env vars: `APP_ENV`, `DATABASE_URL`, `LLM_PROVIDER`, `OPENROUTER_API_KEY`
-   / `GEMINI_API_KEY`, `BREETH_API_KEY`, `BREETH_BASE_URL`,
-   `PUBLISH_INTERVAL_MINUTES`. For persistence across redeploys, mount a
-   Railway **Volume** at `/app/data` and point `DATABASE_URL` at
-   `sqlite:////app/data/aether.db`.
-2. **Frontend service** — Root Directory `frontend`. Railway auto-detects
-   `frontend/railway.json`. Set `NEXT_PUBLIC_API_URL` to the backend domain
-   **before** the first build (it's baked in at build time).
-3. Both services redeploy automatically on every push to `main`.
+## Google Colab
 
-## Development Philosophy
+Open `notebooks/ORIGIN_AI_Colab.ipynb`, select a Tesla T4 GPU runtime, and run the cells in order. The notebook verifies CUDA, mounts Google Drive, installs the additional corpus/tokenizer dependencies without replacing Colab's CUDA-enabled PyTorch, and asks you to upload the project ZIP if the source tree is not already in `/content/ORIGIN-AI`. Training checkpoints, corpus files, caches, and logs are saved under `/content/drive/MyDrive/ORIGIN-AI/`. It runs the toy smoke test before WikiText-2 training, resumes only when the saved checkpoint and tokenizer are valid, and evaluates on the held-out validation split.
 
-Build only what the PRD requires. No auth, no dashboards, no placeholder
-pages, no feature creep. See `AI_USAGE_LOG.md` and `PROMPTS.md` for the
-full build trail across all 20 stages.
+## Data, checkpoints, and secrets
 
-## Post-Launch Hardening (2026-08-09)
+Local datasets and token caches under `data/`, all `checkpoints/`, model files, environment files, credential files, and private-key files are excluded by `.gitignore`. Keep API keys and other secrets in local environment files; never commit them. Example environment files remain tracked.
 
-After going live on Railway, production bugs found and fixed:
+## Scope and limitations
 
-- **Reddit 429 / VentureBeat 308** — browser-grade `User-Agent` +
-  `follow_redirects=True` added to the httpx client; both sources now
-  ingest correctly.
-- **30-min cycle regeneration stopped (critical)** — unevaluated candidates
-  (skipped once the 5-post cap was hit) were locking themselves out of the
-  source cache for 24h. Fixed so only *published* articles stay locked;
-  everything else re-enters the pool every cycle.
-- **Scheduler auto-restart on deploy** — paused agents now correctly stay
-  paused across Railway restarts instead of auto-resuming.
-
-New features shipped in the same pass: expanded discovery from 8 → 14
-sources, feed batch dividers (5-post autonomous batches with timestamps),
-a sticky sidebar batch index, explicit post titles, and a live countdown
-to the next publish cycle.
-
-## ORIGIN AI v0.1
-
-An isolated, CPU-oriented research system has been added alongside Aether. It trains a configurable subword Transformer from random weights on local corpora, preserves official validation data, periodically saves resumable checkpoints, and provides separate local document retrieval. Image/audio features remain explicitly unsupported. Setup and the optional real-corpus training workflow are in [docs/quickstart.md](docs/quickstart.md). Model quality remains experimental and does not claim general-purpose assistant capability.
+- Model weights start randomly; no pretrained weights, hosted model calls, or paid APIs are used.
+- The default architecture and WikiText-2 corpus are intentionally small. Training step counts are experiments, not evidence of assistant-level competence.
+- The document retriever returns matching local TXT/Markdown excerpts separately; the language model does not synthesize grounded answers from retrieved documents.
+- Image input, audio input, and text-to-speech are explicitly unsupported in v0.1.
+- The app is a local experimental interface. It does not provide a production deployment, safety evaluation, or general-purpose assistant guarantee.
