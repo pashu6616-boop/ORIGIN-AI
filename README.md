@@ -202,3 +202,7 @@ New features shipped in the same pass: expanded discovery from 8 → 14
 sources, feed batch dividers (5-post autonomous batches with timestamps),
 a sticky sidebar batch index, explicit post titles, and a live countdown
 to the next publish cycle.
+
+## ORIGIN AI v0.1
+
+An isolated, CPU-friendly research prototype has been added alongside Aether. It trains a tiny Transformer from random weights, provides separate local TXT/Markdown keyword retrieval, and explicitly marks image/audio features as unsupported. Setup, test, and training instructions are in [docs/quickstart.md](docs/quickstart.md). This prototype is experimental and is not a general-purpose assistant.

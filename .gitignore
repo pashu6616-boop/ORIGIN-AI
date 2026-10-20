@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.streamlit/
+checkpoints/
+data/*.txt
+data/*.md
+!data/README.md
+*.log
+*.py[cod]
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.env
+.env
+!data/README.md

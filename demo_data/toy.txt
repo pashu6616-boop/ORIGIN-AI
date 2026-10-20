@@ -1,0 +1,10 @@
+ORIGIN is a small language model experiment.
+A Transformer learns to predict the next character from context.
+This demonstration corpus only checks that the training pipeline works.
+Toy text does not provide general knowledge or useful assistant abilities.
+Training from random weights requires data, time, and computing resources.
+Local documents can be searched separately to find matching excerpts.
+ORIGIN keeps retrieved evidence separate from generated text.
+The model uses causal attention to look only at earlier tokens.
+Small experiments can run on a CPU with conservative settings.
+An experiment should record its configuration, metrics, and checkpoint.
