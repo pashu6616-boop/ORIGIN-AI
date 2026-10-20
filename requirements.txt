@@ -2,3 +2,6 @@
 torch>=2.3,<3
 streamlit>=1.38,<2
 pytest>=8,<10
+numpy>=1.26,<3
+sentencepiece>=0.2,<1
+pyarrow>=17,<25

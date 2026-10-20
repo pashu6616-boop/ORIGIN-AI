@@ -205,4 +205,4 @@ to the next publish cycle.
 
 ## ORIGIN AI v0.1
 
-An isolated, CPU-friendly research prototype has been added alongside Aether. It trains a tiny Transformer from random weights, provides separate local TXT/Markdown keyword retrieval, and explicitly marks image/audio features as unsupported. Setup, test, and training instructions are in [docs/quickstart.md](docs/quickstart.md). This prototype is experimental and is not a general-purpose assistant.
+An isolated, CPU-oriented research system has been added alongside Aether. It trains a configurable subword Transformer from random weights on local corpora, preserves official validation data, periodically saves resumable checkpoints, and provides separate local document retrieval. Image/audio features remain explicitly unsupported. Setup and the optional real-corpus training workflow are in [docs/quickstart.md](docs/quickstart.md). Model quality remains experimental and does not claim general-purpose assistant capability.

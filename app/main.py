@@ -9,7 +9,7 @@ def main():
     from origin.config import ModelConfig
     from origin.knowledge import DocumentIndex
     from origin.model import DecoderTransformer
-    from origin.tokenizer import CharacterTokenizer
+    from origin.tokenizer import CharacterTokenizer, load_tokenizer
     from origin.training.checkpoint import load_checkpoint
     st.set_page_config(page_title="ORIGIN AI v0.1", page_icon="◉", layout="centered")
     st.title("◉ ORIGIN AI"); st.caption("v0.1 · A small, experimental language-model foundation")
@@ -18,7 +18,7 @@ def main():
     if checkpoint.exists() and checkpoint.with_suffix(".tokenizer.json").exists():
         try:
             payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
-            tokenizer = CharacterTokenizer.load(checkpoint.with_suffix(".tokenizer.json"))
+            tokenizer = load_tokenizer(checkpoint.with_suffix(".tokenizer.json"))
             model = DecoderTransformer(ModelConfig(**payload["model_config"]))
             load_checkpoint(checkpoint, model)
             st.success(f"Native model: trained checkpoint, step {payload.get('step', '?')} · CPU")
@@ -62,7 +62,7 @@ def main():
                 if not prompt_ids: answer = "Enter at least one supported character."
                 else:
                     tokens = torch.tensor([prompt_ids[-model.config.block_size:]], dtype=torch.long)
-                    generated = model.generate(tokens, max_new_tokens=120, temperature=0.9, top_k=20)
+                    generated = model.generate(tokens, max_new_tokens=120, temperature=0.9, top_k=20, eos_token_id=getattr(tokenizer, "eos_id", None))
                     answer = tokenizer.decode(generated[0, len(tokens[0]):].tolist()) or "(No new characters generated.)"
                 st.text(answer)
         st.session_state.messages.append({"role":"assistant","content":answer})

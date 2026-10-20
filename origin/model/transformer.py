@@ -63,7 +63,7 @@ class DecoderTransformer(nn.Module):
         loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1)) if targets is not None else None
         return logits, loss
     @torch.no_grad()
-    def generate(self, tokens: torch.Tensor, max_new_tokens: int = 80, temperature: float = 1.0, top_k: int | None = None):
+    def generate(self, tokens: torch.Tensor, max_new_tokens: int = 80, temperature: float = 1.0, top_k: int | None = None, eos_token_id: int | None = None):
         if max_new_tokens < 0 or temperature <= 0 or (top_k is not None and top_k < 1):
             raise ValueError("Invalid generation settings.")
         self.eval()
@@ -73,5 +73,8 @@ class DecoderTransformer(nn.Module):
             if top_k is not None:
                 values, _ = torch.topk(next_logits, min(top_k, next_logits.size(-1)))
                 next_logits[next_logits < values[:, [-1]]] = -torch.inf
-            tokens = torch.cat((tokens, torch.multinomial(F.softmax(next_logits, dim=-1), 1)), dim=1)
+            next_token = torch.multinomial(F.softmax(next_logits, dim=-1), 1)
+            tokens = torch.cat((tokens, next_token), dim=1)
+            if eos_token_id is not None and bool((next_token == eos_token_id).all()):
+                break
         return tokens

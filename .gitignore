@@ -3,8 +3,7 @@ __pycache__/
 .pytest_cache/
 .streamlit/
 checkpoints/
-data/*.txt
-data/*.md
+data/*
 !data/README.md
 *.log
 *.py[cod]

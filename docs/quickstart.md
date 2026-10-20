@@ -1,6 +1,6 @@
 # ORIGIN AI v0.1
 
-The existing repository contains Aether. ORIGIN is added alongside it as a separate research prototype. ORIGIN uses a tiny Transformer with random initialization and separate keyword search over local documents. It is not equivalent to ChatGPT, has no general knowledge before training, and has no working image or audio capabilities. It does not call a paid API or download pretrained weights.
+The repository contains Aether. ORIGIN is added alongside it as a separate local research system. It trains a subword tokenizer from local text and a compact decoder-only Transformer from random weights. It has no pretrained model downloads or paid API calls. Image and audio features are not implemented, and model quality depends on the authorized training corpus, training time, and hardware.
 
 ## Windows 11 setup
 
@@ -24,18 +24,25 @@ python scripts/evaluate.py "ORIGIN"
 streamlit run app/main.py
 ```
 
-Streamlit prints the local app address. Before training, it labels the model as randomly initialized. After smoke training it loads the checkpoint. Choose “Search supplied documents” and upload TXT/Markdown files to display separate excerpts and filenames. PDF and recursive directory scanning are not included.
+Streamlit prints the local app address. Before training, it labels the model as randomly initialized. After training it loads the checkpoint. Choose “Search supplied documents” and upload TXT/Markdown files to display separate excerpts and filenames. PDF ingestion is not included.
 
-## Training experiment
+## Train on a real corpus
 
-Place authorized UTF-8 text in a local `.txt` file, one example/document per line. Then run:
+For a reproducible real-text experiment, optionally download WikiText-2, a public Wikipedia-derived language-modeling dataset maintained in the Salesforce Hugging Face repository. The downloader validates the training file digest and never overwrites existing destination files. It needs `pyarrow` to convert the published Parquet splits to plain text. Review the included source/license note before use or redistribution.
 
 ```powershell
-python scripts/train.py --data .\data\my_corpus.txt
-python scripts/train.py --data .\data\my_corpus.txt --resume
+python scripts/download_wikitext2.py
+python scripts/train.py --data .\data\wikitext-2\wiki.train.tokens --validation-data .\data\wikitext-2\wiki.valid.tokens --steps 1000
+python scripts/train.py --data .\data\wikitext-2\wiki.train.tokens --validation-data .\data\wikitext-2\wiki.valid.tokens --resume --steps 500
 ```
 
-Adjust `configs/model.json` and `configs/training.json` first. The shipped model is 1 layer, 32 hidden units, 2 attention heads, and 64 character context. Checkpoint weights, tokenizer, config, metrics, and optimizer state are saved under the ignored `checkpoints/` directory. Resume requires the same dataset vocabulary and model shape. The loader rejects input files over 25 MB, removes duplicate non-empty lines, and makes a seeded line-level split. Output quality will be very poor on the tiny demonstration data. Memory use changes with vocabulary, context, batch size, and hidden width; lower those values on constrained computers.
+The train and validation splits remain separate; the official test file is not used. You can also point `--data` to an authorized local `.txt`, `.md`, `.tokens`, or `.jsonl` file or directory. JSONL records must contain a string `text` field. ORIGIN performs streaming Unicode/whitespace cleanup and exact duplicate removal, trains BPE only on training data, and caches token IDs in memory-mapped files. The default corpus cap is 5 GiB. Checkpoints save every 100 steps and include model/optimizer state, tokenizer, training config, metrics, and step. Resume uses the same corpus fingerprint and adds the requested number of steps.
+
+A verified 100-step CPU run in this development environment used 21,331 train lines and 2,318 validation lines, cached 3,431,590 train subword tokens, and reported train loss 6.55 / validation loss 6.35 at step 100. The checkpoint resumed to step 102. This proves the pipeline trains and resumes on the real split; it is far too little training to imply useful assistant behavior.
+
+The default model is 2 layers, 96 hidden units, 4 attention heads, and 128 subword tokens of context. Adjust `configs/model.json` and `configs/training.json` for your CPU. The CLI reports parameter/optimizer memory estimate; activations add memory based on context and batch size. A dataset can be licensed for research without being licensed for redistribution, so review its terms. WikiText-2 training demonstrates learning from real text, not useful general-purpose assistant quality.
+
+For pipeline verification only, use `python scripts/train.py --data demo_data/toy.txt --smoke-test`. This fixture is not the default and must not be described as useful training.
 
 ## Optional Google Colab Free
 
